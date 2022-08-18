@@ -11,6 +11,7 @@ import (
 	"go.minekube.com/common/minecraft/color"
 	"go.minekube.com/common/minecraft/component"
 	"go.minekube.com/gate/pkg/edition/java/proto/util"
+	"go.minekube.com/gate/pkg/edition/java/proto/version"
 
 	"github.com/go-logr/logr"
 
@@ -18,7 +19,6 @@ import (
 	"go.minekube.com/gate/pkg/edition/java/config"
 	"go.minekube.com/gate/pkg/edition/java/profile"
 	"go.minekube.com/gate/pkg/edition/java/proto/packet"
-	"go.minekube.com/gate/pkg/edition/java/proto/version"
 	"go.minekube.com/gate/pkg/gate/proto"
 	"go.minekube.com/gate/pkg/runtime/event"
 	"go.minekube.com/gate/pkg/util/netutil"
@@ -93,21 +93,21 @@ func (l *initialLoginSessionHandler) handleServerLogin(login *packet.ServerLogin
 
 	playerKey := login.PlayerKey
 	if playerKey != nil {
-		if playerKey.Expired() {
-			l.log.V(1).Info("expired player public key")
-			_ = l.inbound.disconnect(&component.Translation{
-				Key: "multiplayer.disconnect.invalid_public_key_signature",
-			})
-			return
-		}
+		// if playerKey.Expired() {
+		// 	l.log.V(1).Info("expired player public key")
+		// 	_ = l.inbound.disconnect(&component.Translation{
+		// 		Key: "multiplayer.disconnect.invalid_public_key_signature",
+		// 	})
+		// 	return
+		// }
 
-		if !playerKey.SignatureValid() {
-			l.log.V(1).Info("invalid player public key signature")
-			_ = l.inbound.disconnect(&component.Translation{
-				Key: "multiplayer.disconnect.invalid_public_key",
-			})
-			return
-		}
+		// if !playerKey.SignatureValid() {
+		// 	l.log.V(1).Info("invalid player public key signature")
+		// 	_ = l.inbound.disconnect(&component.Translation{
+		// 		Key: "multiplayer.disconnect.invalid_public_key",
+		// 	})
+		// 	return
+		// }
 	} else if l.conn.Protocol().GreaterEqual(version.Minecraft_1_19) &&
 		l.proxy().config.ForceKeyAuthentication {
 		_ = l.inbound.disconnect(&component.Translation{

@@ -1,6 +1,8 @@
 package proxy
 
 import (
+	"fmt"
+
 	"github.com/go-logr/logr"
 	"go.minekube.com/gate/pkg/edition/java/config"
 	"go.minekube.com/gate/pkg/edition/java/profile"
@@ -93,6 +95,7 @@ func (a *authSessionHandler) completeLoginProtocolPhaseAndInit(player *connected
 	}
 
 	// Send login success
+	fmt.Println("nonoe forwarding mode")
 	playerID := player.ID()
 	if cfg.Forwarding.Mode == config.NoneForwardingMode {
 		playerID = uuid.OfflinePlayerUUID(player.Username())

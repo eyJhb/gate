@@ -113,23 +113,25 @@ func (b *backendLoginSessionHandler) handleLoginPluginMessage(p *packet.LoginPlu
 	cfg := b.config()
 	if cfg.Forwarding.Mode == config.VelocityForwardingMode && p.Channel == velocityIpForwardingChannel {
 
-		proposedForwardingVersion := velocityDefaultForwardingVersion
+		// proposedForwardingVersion := velocityDefaultForwardingVersion
+		requestedForwardingVersion := velocityDefaultForwardingVersion
 		// Check version
 		if len(p.Data) == 1 {
-			requested := int(p.Data[0])
-			if !(requested >= velocityDefaultForwardingVersion) {
-				b.log.Info("invalid modern forwarding version", "requested", requested)
-				b.serverConn.disconnect()
-				return
-			}
-			proposedForwardingVersion = min(requested, velocityWithKeyForwardingVersion)
+			// requested := int(p.Data[0])
+			// if !(requested >= velocityDefaultForwardingVersion) {
+			// 	b.log.Info("invalid modern forwarding version", "requested", requested)
+			// 	b.serverConn.disconnect()
+			// 	return
+			// }
+			// proposedForwardingVersion = min(requested, velocityWithKeyForwardingVersion)
+			requestedForwardingVersion = int(p.Data[0])
 		}
 
 		forwardingData, err := createVelocityForwardingData(
 			[]byte(cfg.Forwarding.VelocitySecret),
 			netutil.Host(b.serverConn.Player().RemoteAddr()),
 			b.serverConn.player.profile,
-			b.serverConn.player.playerKey, proposedForwardingVersion,
+			b.serverConn.player.playerKey, requestedForwardingVersion,
 		)
 		if err != nil {
 			b.log.Error(err, "error creating velocity forwarding data")

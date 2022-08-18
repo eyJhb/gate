@@ -360,6 +360,9 @@ func (s *ServerPlayerChat) Decode(c *proto.PacketContext, rd io.Reader) (err err
 
 var _ proto.Packet = (*ServerPlayerChat)(nil)
 
+// type PlayerChatCompletion struct {
+// }V
+
 type ChatBuilder struct {
 	protocol          proto.Protocol
 	component         component.Component
