@@ -17,7 +17,7 @@ import (
 type ServerLogin struct {
 	Username  string
 	PlayerKey crypto.IdentifiedKey // 1.19+
-	UUID      uuid.UUID            // 1.19.1+
+	UUID      uuid.UUID            // 1.19.1+ (used for key revision 2)
 }
 
 var errEmptyUsername = errs.NewSilentErr("empty username")
@@ -32,7 +32,6 @@ func (s *ServerLogin) Encode(c *proto.PacketContext, wr io.Writer) error {
 	if err != nil {
 		return err
 	}
-	fmt.Println("encode ServerLogin", c.Protocol)
 	if c.Protocol.GreaterEqual(version.Minecraft_1_19) {
 		err = util.WriteBool(wr, s.PlayerKey != nil)
 		if err != nil {
@@ -46,13 +45,16 @@ func (s *ServerLogin) Encode(c *proto.PacketContext, wr io.Writer) error {
 		}
 
 		if c.Protocol.GreaterEqual(version.Minecraft_1_19_1) {
-			err = util.WriteBool(wr, s.UUID != uuid.Nil)
+			err = util.WriteBool(wr, s.PlayerKey.SignatureHolder() != uuid.Nil)
 			if err != nil {
 				return err
 			}
-			err = util.WriteUUID(wr, s.UUID)
-			if err != nil {
-				return err
+
+			if s.PlayerKey.SignatureHolder() != uuid.Nil {
+				err = util.WriteUUID(wr, s.UUID)
+				if err != nil {
+					return err
+				}
 			}
 		}
 	}
@@ -65,14 +67,13 @@ func (s *ServerLogin) Decode(c *proto.PacketContext, rd io.Reader) (err error) {
 		return errEmptyUsername
 	}
 
-	fmt.Println("decode ServerLogin", c.Protocol)
 	if c.Protocol.GreaterEqual(version.Minecraft_1_19) {
 		ok, err := util.ReadBool(rd)
 		if err != nil {
 			return err
 		}
 		if ok {
-			s.PlayerKey, err = util.ReadPlayerKey(rd)
+			s.PlayerKey, err = util.ReadPlayerKey(c.Protocol, rd)
 			if err != nil {
 				return err
 			}
@@ -85,7 +86,6 @@ func (s *ServerLogin) Decode(c *proto.PacketContext, rd io.Reader) (err error) {
 			}
 			if ok {
 				s.UUID, err = util.ReadUUID(rd)
-				fmt.Println("user uuid", s.UUID)
 				if err != nil {
 					return err
 				}
@@ -260,12 +260,12 @@ func (s *ServerLoginSuccess) Encode(c *proto.PacketContext, wr io.Writer) (err e
 	if err != nil {
 		return err
 	}
-	// if c.Protocol.GreaterEqual(version.Minecraft_1_19) {
-	// 	err = util.WriteProperties(wr, s.Properties)
-	// 	if err != nil {
-	// 		return err
-	// 	}
-	// }
+	if c.Protocol.GreaterEqual(version.Minecraft_1_19) {
+		err = util.WriteProperties(wr, s.Properties)
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

@@ -219,7 +219,7 @@ var _ proto.Packet = (*PlayerChatPreview)(nil)
 
 type SystemChat struct {
 	Component component.Component
-	Type      int
+	Type      MessageType
 }
 
 func (p *SystemChat) Encode(c *proto.PacketContext, wr io.Writer) error {
@@ -227,16 +227,36 @@ func (p *SystemChat) Encode(c *proto.PacketContext, wr io.Writer) error {
 	if err != nil {
 		return err
 	}
-	return util.WriteVarInt(wr, p.Type)
+	if c.Protocol.GreaterEqual(version.Minecraft_1_19_1) {
+		switch p.Type {
+		case SystemMessageType:
+			return util.WriteBool(wr, false)
+		case GameInfoMessageType:
+			return util.WriteBool(wr, true)
+		default:
+			// TODO: fix this, better error handling
+			return errors.New("invalid chat type")
+		}
+	}
+
+	return util.WriteVarInt(wr, int(p.Type))
 }
 
-func (p *SystemChat) Decode(c *proto.PacketContext, rd io.Reader) (err error) {
+func (p *SystemChat) Decode(c *proto.PacketContext, rd io.Reader) error {
+	var err error
 	p.Component, err = util.ReadComponent(rd, c.Protocol)
 	if err != nil {
 		return err
 	}
-	p.Type, err = util.ReadVarInt(rd)
-	return
+
+	chattype, err := util.ReadVarInt(rd)
+	if err != nil {
+		return err
+	}
+
+	p.Type = MessageType(chattype)
+
+	return nil
 }
 
 var _ proto.Packet = (*SystemChat)(nil)
@@ -360,8 +380,47 @@ func (s *ServerPlayerChat) Decode(c *proto.PacketContext, rd io.Reader) (err err
 
 var _ proto.Packet = (*ServerPlayerChat)(nil)
 
-// type PlayerChatCompletion struct {
-// }V
+type PlayerChatCompletionAction uint8
+
+const (
+	PlayerChatCompletionActionAdd PlayerChatCompletionAction = iota
+	PlayerChatCompletionActionRemove
+	PlayerChatCompletionActionAlter
+)
+
+type PlayerChatCompletion struct {
+	Completions []string
+	Action      PlayerChatCompletionAction
+}
+
+func (s *PlayerChatCompletion) Encode(c *proto.PacketContext, wr io.Writer) error {
+	err := util.WriteVarInt(wr, int(s.Action))
+	if err != nil {
+		return err
+	}
+
+	err = util.WriteStrings(wr, s.Completions)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (s *PlayerChatCompletion) Decode(c *proto.PacketContext, rd io.Reader) (err error) {
+	action, err := util.ReadVarInt(rd)
+	if err != nil {
+		return err
+	}
+
+	s.Action = PlayerChatCompletionAction(action)
+	s.Completions, err = util.ReadStringArray(rd)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
 
 type ChatBuilder struct {
 	protocol          proto.Protocol
@@ -424,7 +483,7 @@ func (b *ChatBuilder) ToClient() proto.Packet {
 		}
 		return &SystemChat{
 			Component: msg,
-			Type:      int(t),
+			Type:      t,
 		}
 	}
 

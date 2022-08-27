@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/go-logr/logr"
+	"go.minekube.com/common/minecraft/component"
 	"go.minekube.com/gate/pkg/edition/java/config"
 	"go.minekube.com/gate/pkg/edition/java/profile"
 	"go.minekube.com/gate/pkg/edition/java/proto/packet"
@@ -12,6 +13,13 @@ import (
 	"go.minekube.com/gate/pkg/gate/proto"
 	"go.minekube.com/gate/pkg/runtime/event"
 	"go.minekube.com/gate/pkg/util/uuid"
+)
+
+var (
+	// TODO: fix
+	multiplayerDisconnectInvalidPublicKey = &component.Text{
+		Content: "Invalid public key - tmp",
+	}
 )
 
 type authSessionHandler struct {
@@ -100,6 +108,27 @@ func (a *authSessionHandler) completeLoginProtocolPhaseAndInit(player *connected
 	if cfg.Forwarding.Mode == config.NoneForwardingMode {
 		playerID = uuid.OfflinePlayerUUID(player.Username())
 	}
+
+	// TODO: most likely incorrect, needs fixing
+	if playerKey := player.IdentifiedKey(); playerKey != nil {
+		if playerKey.SignatureHolder() == uuid.Nil {
+			if !playerKey.InternalAddHolder(player.ID()) {
+				if a.onlineMode {
+					// _ = a.inbound.disconnect(multiplayerDisconnectInvalidPublicKey)
+					// return
+				} else {
+					a.log.Info("key for player could not be verified", "player_username", player.Username())
+				}
+			}
+		} else {
+			if playerKey.SignatureHolder() == playerID {
+				a.log.Info("UUID for player mismatches! Chat/Commands signatures will not work correctly for this player",
+					"player_username", player.Username())
+			}
+		}
+	}
+
+	fmt.Println("before login success")
 	if player.WritePacket(&packet.ServerLoginSuccess{
 		UUID:       playerID,
 		Username:   player.Username(),
@@ -107,6 +136,7 @@ func (a *authSessionHandler) completeLoginProtocolPhaseAndInit(player *connected
 	}) != nil {
 		return
 	}
+	fmt.Println("after login success")
 
 	player.setState(state.Play)
 	loginEvent := &LoginEvent{player: player}
@@ -136,6 +166,7 @@ func (a *authSessionHandler) completeLoginProtocolPhaseAndInit(player *connected
 		player.setSessionHandler(newInitialConnectSessionHandler(player))
 		a.event().Fire(&PostLoginEvent{player: player})
 		a.connectToInitialServer(player)
+		fmt.Println("after connect to i nitial server")
 	})
 }
 
@@ -157,6 +188,7 @@ func (a *authSessionHandler) connectToInitialServer(player *connectedPlayer) {
 	ctx, cancel := withConnectionTimeout(player.Context(), a.proxy().config)
 	defer cancel()
 	player.CreateConnectionRequest(chooseServer.InitialServer()).ConnectWithIndication(ctx)
+	fmt.Println("connectToInitialServer end")
 }
 
 func (a *authSessionHandler) deactivated() {}

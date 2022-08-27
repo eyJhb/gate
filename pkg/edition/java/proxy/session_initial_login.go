@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/rand"
 	"errors"
+	"fmt"
 	"regexp"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	"go.minekube.com/common/minecraft/component"
 	"go.minekube.com/gate/pkg/edition/java/proto/util"
 	"go.minekube.com/gate/pkg/edition/java/proto/version"
+	"go.minekube.com/gate/pkg/edition/java/proxy/crypto/keyrevision"
 
 	"github.com/go-logr/logr"
 
@@ -60,11 +62,13 @@ var invalidPlayerName = &component.Text{
 }
 
 func (l *initialLoginSessionHandler) handlePacket(p *proto.PacketContext) {
+	fmt.Println("session_initial_login: handlePacket")
 	if !p.KnownPacket {
 		// unknown packet, close connection
 		_ = l.conn.closeKnown(true)
 		return
 	}
+	fmt.Printf("--handlePacket: %T\n", p.Packet)
 	switch t := p.Packet.(type) {
 	case *packet.ServerLogin:
 		l.handleServerLogin(t)
@@ -86,28 +90,37 @@ type GameProfileProvider interface {
 }
 
 func (l *initialLoginSessionHandler) handleServerLogin(login *packet.ServerLogin) {
+	fmt.Println("handleServerLogin!!")
 	if !l.assertState(loginPacketExpectedLoginState) {
 		return
 	}
 	l.currentState = loginPacketReceivedLoginState
 
+	fmt.Println("handleServerLogin - before basic validation stuff")
 	playerKey := login.PlayerKey
 	if playerKey != nil {
-		// if playerKey.Expired() {
-		// 	l.log.V(1).Info("expired player public key")
-		// 	_ = l.inbound.disconnect(&component.Translation{
-		// 		Key: "multiplayer.disconnect.invalid_public_key_signature",
-		// 	})
-		// 	return
-		// }
+		if playerKey.Expired() {
+			l.log.V(1).Info("expired player public key")
+			_ = l.inbound.disconnect(&component.Translation{
+				Key: "multiplayer.disconnect.invalid_public_key_signature",
+			})
+			return
+		}
 
-		// if !playerKey.SignatureValid() {
-		// 	l.log.V(1).Info("invalid player public key signature")
-		// 	_ = l.inbound.disconnect(&component.Translation{
-		// 		Key: "multiplayer.disconnect.invalid_public_key",
-		// 	})
-		// 	return
-		// }
+		var isKeyValid bool
+		if playerKey.KeyRevision() == keyrevision.LinkedV2 && playerKey.KeyRevision() != nil {
+			isKeyValid = playerKey.InternalAddHolder(login.UUID)
+		} else {
+			isKeyValid = playerKey.SignatureValid()
+		}
+
+		if !isKeyValid {
+			l.log.V(1).Info("invalid player public key signature")
+			_ = l.inbound.disconnect(&component.Translation{
+				Key: "multiplayer.disconnect.invalid_public_key",
+			})
+			return
+		}
 	} else if l.conn.Protocol().GreaterEqual(version.Minecraft_1_19) &&
 		l.proxy().config.ForceKeyAuthentication {
 		_ = l.inbound.disconnect(&component.Translation{
@@ -117,6 +130,8 @@ func (l *initialLoginSessionHandler) handleServerLogin(login *packet.ServerLogin
 	}
 	l.inbound.playerKey = playerKey
 	l.login = login
+
+	fmt.Println("handleServerLogin - after basic validation stuff")
 
 	// Validate username format
 	if !playerNameRegex.MatchString(login.Username) {

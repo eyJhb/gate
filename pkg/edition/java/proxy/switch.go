@@ -125,11 +125,14 @@ func (c *connectionRequest) Connect(ctx context.Context) (ConnectionResult, erro
 
 // ConnectWithIndication - See ConnectionRequest interface.
 func (c *connectionRequest) ConnectWithIndication(ctx context.Context) (successful bool) {
+	fmt.Println("connectwithindication - before")
 	result, err := c.internalConnect(ctx)
 	if err != nil {
 		c.player.handleConnectionErr(c.server, err, true)
 		return false
 	}
+
+	fmt.Println("connectwithindication - after")
 
 	switch result.Status() {
 	case AlreadyConnectedConnectionStatus:
@@ -140,6 +143,7 @@ func (c *connectionRequest) ConnectWithIndication(ctx context.Context) (successf
 		// Ignore, event subscriber probably handled this.
 	case ServerDisconnectedConnectionStatus:
 		reason := result.Reason()
+		// fmt.Println("serverdisconnect status", reason)
 		if reason == nil {
 			reason = internalServerConnectionError
 		}

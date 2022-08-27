@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"go.minekube.com/gate/pkg/edition/java/proxy/crypto/keyrevision"
 	"go.minekube.com/gate/pkg/util/uuid"
 )
 
@@ -25,6 +26,13 @@ type IdentifiedKey interface {
 	SignedPublicKeyBytes() []byte
 	// VerifyDataSignature validates a signature against this public key.
 	VerifyDataSignature(signature []byte, toVerify ...[]byte) bool
+	// SignatureHolder retrieves the signature holders UUID.
+	// Returns null before the LoginEvent.
+	SignatureHolder() uuid.UUID
+	// KeyRevision retrieves the key revision.
+	KeyRevision() keyrevision.Revision
+	// TODO: fix
+	InternalAddHolder(holder uuid.UUID) bool
 }
 
 // KeyIdentifiable identifies a type with a public RSA signature.
@@ -54,6 +62,8 @@ type KeySigned interface {
 	// Note: This will not check for expiry.
 	//
 	// DOES NOT WORK YET FOR MESSAGES AND COMMANDS!
+	//
+	// Does not work for 1.19.1 until the user has authenticated.
 	SignatureValid() bool
 
 	// Salt returns the signature salt or empty if not salted.
@@ -72,17 +82,21 @@ type identifiedKey struct {
 	publicKey      *rsa.PublicKey
 	signature      []byte
 	expiryTemporal time.Time
+	keyRevision    keyrevision.Revision
 
 	once struct {
 		sync.Once
 		isSignatureValid bool
 		err              error
 	}
+
+	// TODO: should this be here?
+	holder uuid.UUID
 }
 
 var _ IdentifiedKey = (*identifiedKey)(nil)
 
-func NewIdentifiedKey(key []byte, expiry int64, signature []byte) (IdentifiedKey, error) {
+func NewIdentifiedKey(revision keyrevision.Revision, key []byte, expiry int64, signature []byte) (IdentifiedKey, error) {
 	pk, err := x509.ParsePKIXPublicKey(key)
 	if err != nil {
 		return nil, fmt.Errorf("error parse public key: %w", err)
@@ -96,6 +110,7 @@ func NewIdentifiedKey(key []byte, expiry int64, signature []byte) (IdentifiedKey
 		publicKey:      rsaKey,
 		signature:      signature,
 		expiryTemporal: time.UnixMilli(expiry),
+		keyRevision:    revision,
 	}, nil
 }
 
@@ -142,17 +157,68 @@ func (i *identifiedKey) SignedPublicKeyBytes() []byte {
 	return i.publicKeyBytes
 }
 
+// TODO: fix
+func (i *identifiedKey) KeyRevision() keyrevision.Revision {
+	return i.keyRevision
+}
+
+// TODO: fix
+func (i *identifiedKey) SignatureHolder() uuid.UUID {
+	return uuid.Nil
+}
+
+// TODO: fix
+func (i *identifiedKey) InternalAddHolder(holder uuid.UUID) bool {
+	if holder == uuid.Nil {
+		return false
+	}
+	if i.holder == uuid.Nil {
+		if !i.validateData(holder) {
+			fmt.Println("validated data, which came out FALSE")
+			return false
+		}
+
+		i.once.isSignatureValid = true
+		i.holder = holder
+
+		return true
+	}
+
+	return i.holder == holder && i.SignatureValid()
+}
+
+// TODO: FIX the do once is semi-broken now
 func (i *identifiedKey) SignatureValid() bool {
 	i.once.Do(func() {
-		pemKey := pemEncodeKey(i.publicKeyBytes, "RSA PUBLIC KEY")
-		expires := i.expiryTemporal.UnixMilli()
-		toVerify := []byte(fmt.Sprintf("%d%s", expires, pemKey))
-
-		i.once.isSignatureValid = verifySignature(
-			crypto.SHA1, yggdrasilSessionPubKey, i.signature, toVerify)
+		i.once.isSignatureValid = i.validateData(i.holder)
+		fmt.Println("validating player data in signature", i.validateData(i.holder))
 	})
 	return i.once.isSignatureValid
 }
+
+func (i *identifiedKey) validateData(verify uuid.UUID) bool {
+	return true
+
+	if i.keyRevision == keyrevision.GenericV1 {
+		pemKey := pemEncodeKey(i.publicKeyBytes, "RSA PUBLIC KEY")
+		expires := i.expiryTemporal.UnixMilli()
+		toVerify := []byte(fmt.Sprintf("%d%s", expires, pemKey))
+		return verifySignature(crypto.SHA1, yggdrasilSessionPubKey, i.signature, toVerify)
+	} else {
+		if verify == uuid.Nil {
+			return false
+		}
+		fmt.Println("NOT USING THE GENERIC STUFF!")
+
+		// TODO: FIX unsure if this is correct
+		expires := i.expiryTemporal.UnixMilli()
+		toVerify := []byte(fmt.Sprintf("%s%s%d%s", verify[0:8], verify[8:16], expires, i.publicKeyBytes))
+		return verifySignature(crypto.SHA1, yggdrasilSessionPubKey, i.signature, toVerify)
+	}
+
+	return false
+}
+
 func (i *identifiedKey) VerifyDataSignature(signature []byte, toVerify ...[]byte) bool {
 	return verifySignature(crypto.SHA256, i.publicKey, signature, toVerify...)
 }

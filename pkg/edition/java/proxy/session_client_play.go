@@ -564,6 +564,9 @@ func (c *clientPlaySessionHandler) processPlayerChat(msg string, signedChatMessa
 		if !ok {
 			return
 		}
+		// if e.player.IdentifiedKey() == nil {
+		// }
+		// e.player.IdentifiedKey().KeyRevision().c
 		if e.modified != "" {
 			c.log1.Info("player sent chat message",
 				"original", e.Original(), "modified", e.modified)

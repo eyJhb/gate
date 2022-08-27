@@ -299,8 +299,9 @@ func init() {
 		m(0x5F, version.Minecraft_1_19),
 		m(0x62, version.Minecraft_1_19_1),
 	)
-	// clientbound.register(PlayerChatCompletion.class, PlayerChatCompletion::new,
-	//     StateRegistry.map(0x15, MINECRAFT_1_19_1, true));
+	Play.ClientBound.Register(&p.PlayerChatCompletion{},
+		m(0x15, version.Minecraft_1_19_1),
+	)
 
 	Play.ClientBound.Register(&p.ServerData{},
 		m(0x3F, version.Minecraft_1_19),

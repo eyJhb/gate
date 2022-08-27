@@ -382,6 +382,7 @@ func (s *serverConnection) connect(ctx context.Context) (result *connectionResul
 	err = serverMc.WritePacket(&packet.ServerLogin{
 		Username:  s.player.Username(),
 		PlayerKey: s.player.IdentifiedKey(),
+		UUID:      s.player.ID(),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("error writing ServerLogin packet to server connection: %w", err)
